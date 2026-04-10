@@ -1,0 +1,61 @@
+"""
+Anthropic Claude API: streaming responses with source context.
+"""
+
+import os
+import json
+
+import anthropic
+
+from .config import MODEL_NAME
+
+
+def ask_claude(question: str, chunks: list[dict]):
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        yield "data: " + json.dumps({"error": "ANTHROPIC_API_KEY not set. Add it to your environment and restart."}) + "\n\n"
+        return
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    context_parts = []
+    for i, chunk in enumerate(chunks, 1):
+        source_label = f"{chunk.get('directory', '')}/{chunk['filename']}" if chunk.get('directory') else chunk['filename']
+        context_parts.append(
+            f"[Source {i}: {source_label}, Page {chunk['page']}]\n"
+            f"{chunk['text']}"
+        )
+    context = "\n\n---\n\n".join(context_parts)
+
+    system_prompt = """You are a knowledgeable research assistant with access to a large document library. The user has asked a question and you have been given the most relevant passages from the document database.
+
+Guidelines:
+- Cite sources inline: (Source N — Filename, Page X)
+- If multiple documents agree or differ, note it.
+- Be thorough and specific — the user needs actionable information.
+- If the passages don't fully answer the question, say so and explain what's missing.
+- Structure your answer clearly with paragraphs. Use markdown formatting where helpful.
+- Never fabricate information not present in the sources."""
+
+    user_message = f"""Question: {question}
+
+Relevant passages from the document database:
+
+{context}
+
+Please answer the question based on these passages."""
+
+    try:
+        with client.messages.stream(
+            model=MODEL_NAME,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+        ) as stream_obj:
+            for text in stream_obj.text_stream:
+                yield "data: " + json.dumps({"delta": text}) + "\n\n"
+        yield "data: " + json.dumps({"done": True}) + "\n\n"
+    except anthropic.AuthenticationError:
+        yield "data: " + json.dumps({"error": "Invalid API key. Check ANTHROPIC_API_KEY."}) + "\n\n"
+    except Exception as e:
+        yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
