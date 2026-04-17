@@ -1,8 +1,8 @@
 # Document RAG Search - Dependencies
 # Install with: pip install -r requirements.txt
 
-# Streamlit UI
-streamlit>=1.30.0
+# Web server
+flask>=3.0.0
 
 # Anthropic Claude API
 anthropic>=0.30.0

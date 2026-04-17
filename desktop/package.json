@@ -1,0 +1,19 @@
+{
+  "name": "docrag-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "electrobun": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "start": "bun run build:dev && electrobun dev",
+    "build:dev": "bun install && electrobun build",
+    "build:prod": "bun install && electrobun build --production"
+  }
+}

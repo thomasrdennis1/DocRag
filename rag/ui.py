@@ -24,17 +24,18 @@ HTML_PAGE = r"""<!DOCTYPE html>
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
 
 /* Header */
-header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;padding:12px 20px;padding-left:80px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;-webkit-app-region:drag}
 header .logo{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
 header .brand{display:flex;align-items:center;gap:14px}
 header h1{font-size:17px;font-weight:600}
 header .center-controls{display:flex;align-items:center;justify-content:center;gap:12px}
 header .right-controls{display:flex;align-items:center;gap:12px;justify-self:end}
 header .sub{font-size:12px;color:var(--muted)}
-.theme-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;width:36px;height:36px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s}
+.theme-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;width:36px;height:36px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s;-webkit-app-region:no-drag}
 .theme-btn:hover{border-color:var(--accent)}
 .badge{font-size:11px;padding:4px 10px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
 .badge.ok{color:var(--green);border-color:rgba(34,197,94,.3)}
+.mode-toggle{-webkit-app-region:no-drag}
 
 /* Tabs */
 .tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
@@ -243,6 +244,30 @@ main{flex:1;display:flex;flex-direction:column;overflow:hidden}
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Settings overlay */
+.settings-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:none;align-items:center;justify-content:center}
+.settings-overlay.open{display:flex}
+.settings-panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:480px;max-height:80vh;overflow-y:auto;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.settings-panel h2{font-size:18px;margin-bottom:20px;display:flex;align-items:center;gap:10px}
+.settings-panel h2 .close-settings{margin-left:auto;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:color .15s}
+.settings-panel h2 .close-settings:hover{color:var(--text)}
+.settings-section{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:20px 0 10px;font-weight:600}
+.settings-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.settings-row label{font-size:13px;min-width:110px;color:var(--text)}
+.settings-row input[type=text],.settings-row input[type=password]{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 14px;font-size:13px;font-family:inherit}
+.settings-row input:focus{outline:none;border-color:var(--accent)}
+.settings-row input::placeholder{color:var(--muted)}
+.settings-row .toggle-row{display:flex;gap:0;background:var(--surface2);border-radius:8px;border:1px solid var(--border);overflow:hidden;flex:1}
+.settings-row .toggle-opt{flex:1;padding:8px 0;font-size:12px;font-weight:500;text-align:center;cursor:pointer;color:var(--muted);transition:all .15s;border:none;background:none}
+.settings-row .toggle-opt.active{background:var(--accent);color:#fff}
+.settings-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;transition:border-color .15s;display:flex;align-items:center;gap:8px}
+.settings-btn:hover{border-color:var(--accent)}
+.settings-save{background:var(--accent);border:none;color:#fff;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:500;cursor:pointer;transition:opacity .15s;margin-top:20px;width:100%}
+.settings-save:hover{opacity:.85}
+.settings-path{font-size:11px;color:var(--muted);word-break:break-all;margin-top:2px;line-height:1.4}
+.settings-status{font-size:12px;color:var(--green);margin-top:8px;display:none}
+.settings-status.visible{display:block}
 </style>
 </head>
 <body>
@@ -262,9 +287,47 @@ main{flex:1;display:flex;flex-direction:column;overflow:hidden}
   </div>
   <div class="right-controls">
     <span class="sub">Powered by Claude + Local Embeddings</span>
-    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode">&#x2600;</button>
+    <button class="theme-btn" id="settings-btn" onclick="openSettings()" title="Settings">&#x2699;</button>
   </div>
 </header>
+
+<!-- Settings Overlay -->
+<div class="settings-overlay" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
+  <div class="settings-panel">
+    <h2>&#x2699; Settings <button class="close-settings" onclick="closeSettings()">&#x2715;</button></h2>
+
+    <div class="settings-section">Appearance</div>
+    <div class="settings-row">
+      <label>Theme</label>
+      <div class="toggle-row">
+        <button class="toggle-opt" id="theme-dark" onclick="setTheme('dark')">&#x1F319; Dark</button>
+        <button class="toggle-opt" id="theme-light" onclick="setTheme('light')">&#x2600; Light</button>
+      </div>
+    </div>
+
+    <div class="settings-section">API</div>
+    <div class="settings-row">
+      <label>API Key</label>
+      <input type="password" id="api-key-input" placeholder="sk-ant-..." />
+    </div>
+    <div class="settings-row">
+      <label>Model</label>
+      <input type="text" id="model-input" placeholder="claude-sonnet-4-6" />
+    </div>
+
+    <div class="settings-section">Storage</div>
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <div style="display:flex;gap:10px;width:100%">
+        <button class="settings-btn" onclick="revealFolder('docs')">&#x1F4C1; Open Documents Folder</button>
+        <button class="settings-btn" onclick="revealFolder('app')">&#x1F4C2; Open App Data</button>
+      </div>
+      <div class="settings-path" id="settings-path-info">Loading...</div>
+    </div>
+
+    <button class="settings-save" onclick="saveSettings()">Save Settings</button>
+    <div class="settings-status" id="settings-status">&#x2713; Settings saved</div>
+  </div>
+</div>
 
 <div class="tabs">
   <div class="tab active" onclick="switchTab('search')">Search</div>
@@ -413,23 +476,84 @@ const ta = document.getElementById('question');
 ta.addEventListener('input', () => { ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,140)+'px'; });
 ta.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){e.preventDefault();sendQuestion()} });
 
-// ─── Theme toggle ───
-function toggleTheme() {
-  const html = document.documentElement;
-  const current = html.getAttribute('data-theme');
-  const next = current === 'light' ? 'dark' : 'light';
-  html.setAttribute('data-theme', next === 'dark' ? '' : 'light');
-  if (next === 'dark') html.removeAttribute('data-theme');
-  document.getElementById('theme-btn').innerHTML = next === 'light' ? '&#x1F319;' : '&#x2600;';
-  localStorage.setItem('rag-theme', next);
+// ─── Theme ───
+function setTheme(t) {
+  if (t === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  localStorage.setItem('rag-theme', t);
+  document.getElementById('theme-dark').classList.toggle('active', t === 'dark');
+  document.getElementById('theme-light').classList.toggle('active', t === 'light');
 }
 (function(){
-  const saved = localStorage.getItem('rag-theme');
-  if (saved === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-    document.getElementById('theme-btn').innerHTML = '&#x1F319;';
-  }
+  const saved = localStorage.getItem('rag-theme') || 'dark';
+  setTheme(saved);
 })()
+
+// ─── Settings ───
+let _settingsData = {};
+
+function openSettings() {
+  document.getElementById('settings-overlay').classList.add('open');
+  loadSettingsData();
+}
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('open');
+  document.getElementById('settings-status').classList.remove('visible');
+}
+
+async function loadSettingsData() {
+  try {
+    const res = await fetch('/api/settings');
+    _settingsData = await res.json();
+    document.getElementById('api-key-input').value = '';
+    document.getElementById('api-key-input').placeholder = _settingsData.anthropic_api_key_set
+      ? _settingsData.anthropic_api_key_masked
+      : 'sk-ant-...';
+    document.getElementById('model-input').value = _settingsData.model_name || '';
+    document.getElementById('settings-path-info').textContent =
+      'Documents: ' + _settingsData.docs_dir + '\nDatabase: ' + _settingsData.db_path;
+    // Sync theme toggles
+    const currentTheme = localStorage.getItem('rag-theme') || 'dark';
+    document.getElementById('theme-dark').classList.toggle('active', currentTheme === 'dark');
+    document.getElementById('theme-light').classList.toggle('active', currentTheme === 'light');
+  } catch(e) { console.error('Failed to load settings:', e); }
+}
+
+async function saveSettings() {
+  const payload = {};
+  const theme = document.getElementById('theme-dark').classList.contains('active') ? 'dark' : 'light';
+  payload.theme = theme;
+  setTheme(theme);
+  const newKey = document.getElementById('api-key-input').value.trim();
+  if (newKey) payload.anthropic_api_key = newKey;
+  const model = document.getElementById('model-input').value.trim();
+  if (model) payload.model_name = model;
+  try {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const status = document.getElementById('settings-status');
+    status.classList.add('visible');
+    setTimeout(() => status.classList.remove('visible'), 2500);
+    if (newKey) {
+      document.getElementById('api-key-input').value = '';
+      document.getElementById('api-key-input').placeholder = newKey.slice(0,4) + '…' + newKey.slice(-4);
+    }
+  } catch(e) { alert('Failed to save: ' + e.message); }
+}
+
+async function revealFolder(target) {
+  await fetch('/api/settings/reveal', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({target}),
+  });
+}
 
 // ─── Search mode ───
 let searchMode = 'ai'; // 'ai', 'direct', or 'pdf'

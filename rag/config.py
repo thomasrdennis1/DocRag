@@ -1,25 +1,35 @@
 """
-Configuration — loads from settings.json, falls back to defaults.
+Configuration — settings.json in ~/Library/Application Support/DocRag/
 """
 
 import json
+import platform
 from pathlib import Path
 
-SETTINGS_FILE = Path(__file__).resolve().parent.parent / "settings.json"
+# ── Application data directory ────────────────────────────────────────
+if platform.system() == "Darwin":
+    APP_DIR = Path.home() / "Library" / "Application Support" / "DocRag"
+else:
+    APP_DIR = Path.home() / ".docrag"
+
+APP_DIR.mkdir(parents=True, exist_ok=True)
+
+SETTINGS_FILE = APP_DIR / "settings.json"
 
 _DEFAULTS = {
-    "db_path":          "./rag_search.db",
-    "docs_dir":         "./documents",
-    "port":             5001,
-    "top_k":            12,
-    "model_name":       "claude-sonnet-4-6",
-    "embed_model":      "all-MiniLM-L6-v2",
-    "chunk_target":     1200,
-    "chunk_overlap":    200,
-    "min_chunk_len":    80,
-    "embed_batch_size": 128,
-    "embed_dim":        384,
+    "db_path":           str(APP_DIR / "rag_search.db"),
+    "docs_dir":          str(APP_DIR / "documents"),
+    "port":              5001,
+    "top_k":             12,
+    "model_name":        "claude-sonnet-4-6",
+    "embed_model":       "all-MiniLM-L6-v2",
+    "chunk_target":      1200,
+    "chunk_overlap":     200,
+    "min_chunk_len":     80,
+    "embed_batch_size":  128,
+    "embed_dim":         384,
     "anthropic_api_key": "",
+    "theme":             "dark",
 }
 
 
@@ -28,9 +38,7 @@ def load_settings() -> dict:
     if SETTINGS_FILE.exists():
         with open(SETTINGS_FILE) as f:
             saved = json.load(f)
-        # Merge with defaults so new keys are always present
-        merged = {**_DEFAULTS, **saved}
-        return merged
+        return {**_DEFAULTS, **saved}
     save_settings(_DEFAULTS)
     return dict(_DEFAULTS)
 

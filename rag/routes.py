@@ -10,7 +10,7 @@ from pathlib import Path
 from flask import Flask, request, jsonify, Response
 from werkzeug.utils import secure_filename
 
-from .config import TOP_K, DOCS_DIR
+from .config import TOP_K, DOCS_DIR, load_settings, save_settings, APP_DIR, SETTINGS_FILE
 from .db import get_db, db_stats
 from .search import hybrid_search
 from .claude import ask_claude
@@ -300,5 +300,57 @@ def create_app(db_path: str) -> Flask:
         )
         thread.start()
         return jsonify({"status": "started", "directory": str(root)})
+
+    # ─── Settings ────────────────────────────────────────────────
+
+    @app.route("/api/settings")
+    def get_settings():
+        s = load_settings()
+        # Never send the full API key to the frontend
+        masked = s.get("anthropic_api_key", "")
+        if masked and len(masked) > 8:
+            masked = masked[:4] + "…" + masked[-4:]
+        return jsonify({
+            "theme": s.get("theme", "dark"),
+            "anthropic_api_key_masked": masked,
+            "anthropic_api_key_set": bool(s.get("anthropic_api_key")),
+            "docs_dir": s.get("docs_dir", ""),
+            "db_path": s.get("db_path", ""),
+            "model_name": s.get("model_name", ""),
+            "top_k": s.get("top_k", 12),
+            "app_dir": str(APP_DIR),
+        })
+
+    @app.route("/api/settings", methods=["POST"])
+    def update_settings():
+        data = request.get_json()
+        current = load_settings()
+        # Only allow updating specific keys from the UI
+        allowed = {"theme", "anthropic_api_key", "model_name", "top_k"}
+        for key in allowed:
+            if key in data:
+                current[key] = data[key]
+        save_settings(current)
+        # If API key was updated, set it in the environment
+        if "anthropic_api_key" in data and data["anthropic_api_key"]:
+            os.environ["ANTHROPIC_API_KEY"] = data["anthropic_api_key"]
+        return jsonify({"status": "saved"})
+
+    @app.route("/api/settings/reveal", methods=["POST"])
+    def reveal_folder():
+        """Open the Application Support folder in Finder."""
+        import subprocess
+        import sys
+        target = str(APP_DIR)
+        data = request.get_json() or {}
+        if data.get("target") == "docs":
+            target = str(_docs_root())
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", target])
+        elif sys.platform == "win32":
+            subprocess.Popen(["explorer", target])
+        else:
+            subprocess.Popen(["xdg-open", target])
+        return jsonify({"status": "opened", "path": target})
 
     return app

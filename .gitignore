@@ -25,3 +25,8 @@ documents/
 .env
 settings.json
 config.yaml
+
+# Electrobun desktop build artifacts
+desktop/node_modules/
+desktop/build/
+desktop/bun.lock
