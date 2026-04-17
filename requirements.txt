@@ -1,9 +1,8 @@
 # Document RAG Search - Dependencies
 # Install with: pip install -r requirements.txt
 
-# Streamlit UI + authentication
+# Streamlit UI
 streamlit>=1.30.0
-streamlit-authenticator>=0.3.0
 
 # Anthropic Claude API
 anthropic>=0.30.0
@@ -19,8 +18,3 @@ torch>=2.0.0
 
 # Numerical operations (for vector search)
 numpy>=1.24.0
-
-# Environment and config
-python-dotenv>=1.0.0
-pyyaml>=6.0
-bcrypt>=4.0.0

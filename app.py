@@ -1,9 +1,9 @@
 """
 DocRAG Search — Streamlit Application
 ======================================
-Replaces the Flask + HTML frontend with Streamlit.
 All backend modules (db, search, embeddings, ingest, claude) are reused as-is.
 Settings are stored in a local settings.json file.
+Auth is handled by Streamlit Cloud (viewer access control).
 """
 
 import os
@@ -12,8 +12,6 @@ import threading
 from pathlib import Path
 
 import streamlit as st
-import yaml
-from yaml.loader import SafeLoader
 
 # ── Page config (must be first Streamlit call) ───────────────────────
 st.set_page_config(
@@ -52,81 +50,13 @@ init_db(DB_PATH)
 DOCS_PATH.mkdir(parents=True, exist_ok=True)
 
 
-# ── Authentication ───────────────────────────────────────────────────
-import bcrypt
-import streamlit_authenticator as stauth
-
-CONFIG_PATH = Path("config.yaml")
-
-def _load_auth_config() -> dict:
-    """Load auth config from config.yaml (local) or st.secrets (cloud)."""
-    # 1. Local file
-    if CONFIG_PATH.exists():
-        with open(CONFIG_PATH) as f:
-            cfg = yaml.load(f, Loader=SafeLoader)
-        # Auto-hash plaintext passwords
-        dirty = False
-        for _user, _data in cfg.get("credentials", {}).get("usernames", {}).items():
-            _pw = _data.get("password", "")
-            if _pw and not _pw.startswith("$2b$"):
-                _data["password"] = bcrypt.hashpw(_pw.encode(), bcrypt.gensalt()).decode()
-                dirty = True
-        if dirty:
-            with open(CONFIG_PATH, "w") as f:
-                yaml.dump(cfg, f, default_flow_style=False)
-        return cfg
-
-    # 2. Streamlit Cloud secrets
-    try:
-        if "auth" in st.secrets:
-            # Deep-convert AttrDict to plain dict for streamlit-authenticator
-            import json as _json
-            return _json.loads(_json.dumps(dict(st.secrets["auth"]),
-                                           default=lambda o: dict(o) if hasattr(o, "keys") else o))
-    except (FileNotFoundError, KeyError) as e:
-        st.error(f"Secrets error: `{type(e).__name__}: {e}`")
-        st.stop()
-    except Exception as e:
-        st.error(f"Unexpected secrets error: `{type(e).__name__}: {e}`")
-        st.stop()
-
-    # Debug: show what keys are available
-    try:
-        available = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "no keys method"
-        st.error(f"Missing `[auth]` in Streamlit secrets. Available keys: `{available}`")
-    except Exception:
-        st.error("Missing `config.yaml` (local) or `[auth]` in Streamlit secrets. Could not read secrets.")
-    st.stop()
-
-auth_config = _load_auth_config()
-
-authenticator = stauth.Authenticate(
-    auth_config["credentials"],
-    auth_config["cookie"]["name"],
-    auth_config["cookie"]["key"],
-    auth_config["cookie"]["expiry_days"],
-)
-
-authenticator.login()
-
-if st.session_state.get("authentication_status") is False:
-    st.error("Invalid username or password.")
-    st.stop()
-if st.session_state.get("authentication_status") is None:
-    st.markdown("### 📄 DocRAG Search")
-    st.info("Enter your credentials to continue.")
-    st.stop()
-
-
 # ═════════════════════════════════════════════════════════════════════
-#  AUTHENTICATED — everything below is gated
+#  App UI (auth handled by Streamlit Cloud viewer access)
 # ═════════════════════════════════════════════════════════════════════
 
 # ── Sidebar ──────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📄 DocRAG Search")
-    authenticator.logout("Logout", key="sidebar_logout")
-    st.caption(f"Signed in as **{st.session_state.get('name', '')}**")
     st.divider()
 
     # Database stats
