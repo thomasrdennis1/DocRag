@@ -1,6 +1,6 @@
 """
-DocRAG Search — Streamlit Application
-======================================
+ValoremDB — Document RAG Search (Streamlit)
+=============================================
 All backend modules (db, search, embeddings, ingest, claude) are reused as-is.
 Settings are stored in a local settings.json file.
 Auth is handled by Streamlit Cloud (viewer access control).
@@ -15,11 +15,208 @@ import streamlit as st
 
 # ── Page config (must be first Streamlit call) ───────────────────────
 st.set_page_config(
-    page_title="DocRAG Search",
+    page_title="ValoremDB",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ── Custom CSS to match the original polished UI ─────────────────────
+st.markdown("""
+<style>
+/* ── Global ─────────────────────────────────────────── */
+:root {
+    --accent: #5b6abf;
+    --accent2: #7c5cbf;
+    --green: #16a34a;
+    --red: #dc2626;
+    --amber: #d97706;
+    --muted: #64748b;
+    --border: #d8dce5;
+    --surface: #ffffff;
+    --surface2: #eef1f6;
+    --radius: 10px;
+}
+
+/* Hide default Streamlit chrome */
+#MainMenu {visibility: hidden;}
+header[data-testid="stHeader"] {background: transparent;}
+footer {visibility: hidden;}
+
+/* ── Sidebar ────────────────────────────────────────── */
+section[data-testid="stSidebar"] {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+}
+section[data-testid="stSidebar"] .stMetric label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+}
+
+/* ── Tabs ───────────────────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+}
+.stTabs [data-baseweb="tab"] {
+    padding: 10px 24px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* ── Result cards ───────────────────────────────────── */
+.result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 10px;
+    transition: border-color 0.15s;
+}
+.result-card:hover {
+    border-color: var(--accent);
+}
+.result-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.result-rank {
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.result-file {
+    font-size: 13px;
+    font-weight: 600;
+    flex: 1;
+    word-break: break-all;
+    color: #1e293b;
+}
+.result-page {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+.result-score {
+    font-size: 11px;
+    color: var(--accent);
+    white-space: nowrap;
+    font-weight: 600;
+}
+.result-text {
+    font-size: 13px;
+    line-height: 1.65;
+    color: #334155;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--surface2);
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 6px;
+}
+
+/* ── Source cards ────────────────────────────────────── */
+.source-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 6px;
+}
+.source-num {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+    color: var(--accent);
+}
+.source-title {
+    font-weight: 500;
+    margin-bottom: 2px;
+    color: #1e293b;
+}
+.source-meta {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+/* ── Document list ──────────────────────────────────── */
+.doc-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+.doc-row .doc-icon { font-size: 16px; flex-shrink: 0; }
+.doc-row .doc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.doc-row .doc-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+/* ── Stats badges ───────────────────────────────────── */
+.stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+}
+.stat-badge.ok { color: var(--green); border-color: rgba(22, 163, 74, 0.3); }
+
+/* ── Empty state ────────────────────────────────────── */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+}
+.empty-state .icon { font-size: 52px; opacity: 0.35; margin-bottom: 12px; }
+.empty-state h3 { font-size: 18px; color: #1e293b; margin-bottom: 6px; }
+.empty-state p { font-size: 14px; max-width: 420px; margin: 0 auto; line-height: 1.6; }
+
+/* ── Buttons ────────────────────────────────────────── */
+.stButton > button[kind="primary"] {
+    border-radius: var(--radius);
+}
+
+/* ── Settings section headers ───────────────────────── */
+.settings-section {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin: 16px 0 8px 0;
+}
+</style>
+""", unsafe_allow_html=True)
 
 from rag.config import load_settings, save_settings, SETTINGS_FILE
 from rag.db import init_db, db_stats, get_db
@@ -37,7 +234,6 @@ MODEL_NAME = settings["model_name"]
 
 # Set API key into env so anthropic client picks it up
 _api_key = settings.get("anthropic_api_key") or ""
-# Streamlit Cloud: secrets take priority
 try:
     _api_key = st.secrets.get("ANTHROPIC_API_KEY", _api_key)
 except FileNotFoundError:
@@ -51,12 +247,11 @@ DOCS_PATH.mkdir(parents=True, exist_ok=True)
 
 
 # ═════════════════════════════════════════════════════════════════════
-#  App UI (auth handled by Streamlit Cloud viewer access)
+#  SIDEBAR
 # ═════════════════════════════════════════════════════════════════════
-
-# ── Sidebar ──────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📄 DocRAG Search")
+    st.markdown("## 📄 ValoremDB")
+    st.caption("Document Intelligence Search")
     st.divider()
 
     # Database stats
@@ -69,10 +264,18 @@ with st.sidebar:
     # Indexed directories
     dirs = stats.get("directories", [])
     if dirs:
-        st.markdown("**Indexed Folders**")
+        st.divider()
+        st.markdown('<p class="settings-section">Indexed Folders</p>', unsafe_allow_html=True)
         for d in dirs:
             name = d.get("directory") or "Root"
-            st.caption(f"📁 {name} — {d['docs']} docs, {d['chunks']} chunks")
+            st.markdown(
+                f'<div class="doc-row">'
+                f'<span class="doc-icon">📁</span>'
+                f'<span class="doc-name">{name}</span>'
+                f'<span class="doc-meta">{d["docs"]} docs · {d["chunks"]} chunks</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     st.divider()
 
@@ -102,21 +305,36 @@ with st.sidebar:
             st.caption(last)
 
     st.divider()
-    st.caption(f"Model: `{MODEL_NAME}`")
-    st.caption(f"DB: `{DB_PATH}`")
+    st.markdown(
+        f'<span class="stat-badge">Model: {MODEL_NAME}</span>',
+        unsafe_allow_html=True,
+    )
 
 
-# ── Main Tabs ────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
+#  MAIN TABS
+# ═════════════════════════════════════════════════════════════════════
 tab_ask, tab_search, tab_docs, tab_settings = st.tabs(
     ["💬 Ask", "🔍 Search", "📄 Documents", "⚙️ Settings"]
 )
 
 
-# ────────── ASK TAB (chat interface) ─────────────────────────────────
+# ────────── ASK TAB ──────────────────────────────────────────────────
 with tab_ask:
-    # Session state for chat history
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+
+    # Empty state
+    if not st.session_state.chat_history:
+        st.markdown(
+            '<div class="empty-state">'
+            '<div class="icon">📄</div>'
+            '<h3>Ask anything about your documents</h3>'
+            '<p>Type a question below and the AI will search your indexed documents '
+            'and provide an answer with source citations.</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     # Render past messages
     for entry in st.session_state.chat_history:
@@ -125,22 +343,22 @@ with tab_ask:
             if entry.get("sources"):
                 with st.expander(f"📚 {len(entry['sources'])} sources"):
                     for i, s in enumerate(entry["sources"], 1):
-                        st.caption(
-                            f"**[{i}]** {s['label']} — Page {s['page']} "
-                            f"(score {s['score']:.4f})"
+                        st.markdown(
+                            f'<div class="source-card">'
+                            f'<span class="source-num">{i}</span>'
+                            f'<div><div class="source-title">{s["label"]}</div>'
+                            f'<div class="source-meta">Page {s["page"]} · '
+                            f'Score {s["score"]:.4f}</div></div></div>',
+                            unsafe_allow_html=True,
                         )
 
-    # Chat input (pinned to bottom)
     if prompt := st.chat_input("Ask a question about your documents…"):
-        # Show user message
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Search
         chunks = hybrid_search(DB_PATH, prompt, top_k=TOP_K)
 
-        # Build source list for display
         sources = []
         for c in chunks:
             label = (
@@ -150,26 +368,24 @@ with tab_ask:
             )
             sources.append({"label": label, "page": c["page"], "score": c["score"]})
 
-        # Assistant response
         with st.chat_message("assistant"):
             if not chunks:
-                msg = "No relevant documents found. Try different terms or index more documents."
+                msg = "No relevant documents found. Try different search terms or index more documents."
                 st.warning(msg)
-                st.session_state.chat_history.append(
-                    {"role": "assistant", "content": msg}
-                )
+                st.session_state.chat_history.append({"role": "assistant", "content": msg})
             else:
-                # Sources expander
                 with st.expander(f"📚 {len(sources)} sources", expanded=False):
                     for i, s in enumerate(sources, 1):
-                        st.caption(
-                            f"**[{i}]** {s['label']} — Page {s['page']} "
-                            f"(score {s['score']:.4f})"
+                        st.markdown(
+                            f'<div class="source-card">'
+                            f'<span class="source-num">{i}</span>'
+                            f'<div><div class="source-title">{s["label"]}</div>'
+                            f'<div class="source-meta">Page {s["page"]} · '
+                            f'Score {s["score"]:.4f}</div></div></div>',
+                            unsafe_allow_html=True,
                         )
 
-                # Stream Claude response
                 response = st.write_stream(stream_claude(prompt, chunks))
-
                 st.session_state.chat_history.append(
                     {"role": "assistant", "content": response, "sources": sources}
                 )
@@ -177,17 +393,19 @@ with tab_ask:
 
 # ────────── SEARCH TAB ───────────────────────────────────────────────
 with tab_search:
+    st.markdown("#### Direct Search")
+    st.caption("Search your documents without AI — see the raw matched passages.")
+
     query = st.text_input(
         "Search query:",
         key="search_input",
         placeholder="Search your documents…",
+        label_visibility="collapsed",
     )
 
     if st.button("Search", type="primary", key="search_btn") and query:
         with st.spinner("Searching…"):
-            st.session_state.search_results = hybrid_search(
-                DB_PATH, query, top_k=TOP_K
-            )
+            st.session_state.search_results = hybrid_search(DB_PATH, query, top_k=TOP_K)
             st.session_state.search_query = query
 
     results = st.session_state.get("search_results", [])
@@ -201,15 +419,47 @@ with tab_search:
                 if r.get("directory")
                 else r["filename"]
             )
-            with st.expander(
-                f"**#{i}** {source} — Page {r['page']}  "
-                f"(score {r['score']:.4f})"
-            ):
-                st.text(r["text"])
+            # Escape HTML in text
+            import html
+            safe_text = html.escape(r["text"][:800])
+            st.markdown(
+                f'<div class="result-card">'
+                f'<div class="result-header">'
+                f'<span class="result-rank">{i}</span>'
+                f'<span class="result-file">{html.escape(source)}</span>'
+                f'<span class="result-page">Page {r["page"]}</span>'
+                f'<span class="result-score">{r["score"]:.4f}</span>'
+                f'</div>'
+                f'<div class="result-text">{safe_text}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+    elif sq:
+        st.markdown(
+            '<div class="empty-state">'
+            '<div class="icon">🔍</div>'
+            '<h3>No results found</h3>'
+            '<p>Try different search terms or index more documents.</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="empty-state">'
+            '<div class="icon">🔍</div>'
+            '<h3>Search your document library</h3>'
+            '<p>Enter a query above to find relevant passages across all indexed documents. '
+            'Results are ranked by hybrid keyword + semantic similarity.</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ────────── DOCUMENTS TAB ────────────────────────────────────────────
 with tab_docs:
+    st.markdown("#### Manage Documents")
+    st.caption("Upload PDFs and manage your indexed document library.")
+
     # File uploader
     uploaded = st.file_uploader(
         "Upload PDFs to index",
@@ -225,7 +475,7 @@ with tab_docs:
         )
         folder = st.selectbox("Target folder:", existing_dirs)
 
-        if st.button("💾 Save uploaded files"):
+        if st.button("💾 Save uploaded files", type="primary"):
             target = DOCS_PATH if folder == "(root)" else DOCS_PATH / folder
             target.mkdir(parents=True, exist_ok=True)
             for f in uploaded:
@@ -248,43 +498,53 @@ with tab_docs:
 
     if rows:
         st.markdown(f"**{len(rows)} indexed documents**")
+
+        # Group by directory
+        from collections import defaultdict
+        grouped = defaultdict(list)
         for r in rows:
             r = dict(r)
-            c1, c2, c3, c4, c5 = st.columns([4, 1, 1, 2, 0.5])
-            label = (
-                f"{r['directory']}/{r['filename']}"
-                if r["directory"]
-                else r["filename"]
+            grouped[r.get("directory") or "Root"].append(r)
+
+        for folder_name, docs in sorted(grouped.items()):
+            st.markdown(
+                f'<p class="settings-section">📁 {folder_name} ({len(docs)} files)</p>',
+                unsafe_allow_html=True,
             )
-            c1.markdown(f"📄 {label}")
-            c2.caption(f"{r['pages']}p")
-            c3.caption(f"{r['chunks_count']}ch")
-            c4.caption(r["ingested_at"][:16].replace("T", " "))
-            if c5.button("✕", key=f"del_{r['id']}", help="Remove from index"):
-                conn = get_db(DB_PATH)
-                conn.execute("DELETE FROM chunks WHERE doc_id = ?", (r["id"],))
-                conn.execute("DELETE FROM documents WHERE id = ?", (r["id"],))
-                conn.commit()
-                conn.close()
-                st.rerun()
+            for r in docs:
+                c1, c2, c3, c4, c5 = st.columns([5, 1, 1, 2, 0.5])
+                c1.markdown(f"📄 **{r['filename']}**")
+                c2.caption(f"{r['pages']}p")
+                c3.caption(f"{r['chunks_count']}ch")
+                c4.caption(r["ingested_at"][:16].replace("T", " "))
+                if c5.button("✕", key=f"del_{r['id']}", help="Remove from index"):
+                    conn = get_db(DB_PATH)
+                    conn.execute("DELETE FROM chunks WHERE doc_id = ?", (r["id"],))
+                    conn.execute("DELETE FROM documents WHERE id = ?", (r["id"],))
+                    conn.commit()
+                    conn.close()
+                    st.rerun()
     else:
-        st.info(
-            "No documents indexed yet. Upload PDFs above, then click "
-            "**Re-index Documents** in the sidebar."
+        st.markdown(
+            '<div class="empty-state">'
+            '<div class="icon">📄</div>'
+            '<h3>No documents indexed</h3>'
+            '<p>Upload PDFs above, then click <strong>Re-index Documents</strong> '
+            'in the sidebar to start indexing.</p>'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
 
-# ────────── SETTINGS TAB ────────────────────────────────────────────
+# ────────── SETTINGS TAB ──────────────────────────────────────────────
 with tab_settings:
-    st.markdown("### Application Settings")
+    st.markdown("#### Application Settings")
     st.caption(f"Stored in `{SETTINGS_FILE}`")
     st.divider()
 
-    # Reload fresh from disk so edits aren't stale
     _live = load_settings()
 
-    # -- Paths --
-    st.markdown("**Paths**")
+    st.markdown('<p class="settings-section">Paths</p>', unsafe_allow_html=True)
     col_a, col_b = st.columns(2)
     new_docs_dir = col_a.text_input(
         "Documents folder",
@@ -297,21 +557,16 @@ with tab_settings:
         help="SQLite database that stores chunks and embeddings.",
     )
 
-    # -- API --
-    st.markdown("**API**")
+    st.markdown('<p class="settings-section">API</p>', unsafe_allow_html=True)
     new_api_key = st.text_input(
         "Anthropic API key",
         value=_live.get("anthropic_api_key", ""),
         type="password",
         help="Required for the Ask (Claude) feature. Stored locally in settings.json.",
     )
-    new_model = st.text_input(
-        "Claude model",
-        value=_live["model_name"],
-    )
+    new_model = st.text_input("Claude model", value=_live["model_name"])
 
-    # -- Search / Ingestion --
-    st.markdown("**Search & Ingestion**")
+    st.markdown('<p class="settings-section">Search & Ingestion</p>', unsafe_allow_html=True)
     col_c, col_d, col_e = st.columns(3)
     new_top_k = col_c.number_input("Top K results", value=_live["top_k"], min_value=1, max_value=50)
     new_chunk_target = col_d.number_input("Chunk size (chars)", value=_live["chunk_target"], min_value=200, max_value=5000, step=100)
