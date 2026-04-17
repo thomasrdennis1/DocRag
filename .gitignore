@@ -20,3 +20,8 @@ Thumbs.db
 
 # Documents (user data — not committed)
 documents/
+
+# Secrets — never commit
+.env
+settings.json
+config.yaml
