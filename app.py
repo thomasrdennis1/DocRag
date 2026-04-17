@@ -78,10 +78,12 @@ def _load_auth_config() -> dict:
 
     # 2. Streamlit Cloud secrets
     try:
-        secrets_auth = st.secrets.get("auth", {})
-        if secrets_auth:
-            return dict(secrets_auth)
-    except FileNotFoundError:
+        if "auth" in st.secrets:
+            # Deep-convert AttrDict to plain dict for streamlit-authenticator
+            import json as _json
+            return _json.loads(_json.dumps(dict(st.secrets["auth"]),
+                                           default=lambda o: dict(o) if hasattr(o, "keys") else o))
+    except (FileNotFoundError, KeyError):
         pass
 
     st.error("Missing `config.yaml` (local) or `[auth]` in Streamlit secrets.")
