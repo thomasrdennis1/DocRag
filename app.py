@@ -83,10 +83,19 @@ def _load_auth_config() -> dict:
             import json as _json
             return _json.loads(_json.dumps(dict(st.secrets["auth"]),
                                            default=lambda o: dict(o) if hasattr(o, "keys") else o))
-    except (FileNotFoundError, KeyError):
-        pass
+    except (FileNotFoundError, KeyError) as e:
+        st.error(f"Secrets error: `{type(e).__name__}: {e}`")
+        st.stop()
+    except Exception as e:
+        st.error(f"Unexpected secrets error: `{type(e).__name__}: {e}`")
+        st.stop()
 
-    st.error("Missing `config.yaml` (local) or `[auth]` in Streamlit secrets.")
+    # Debug: show what keys are available
+    try:
+        available = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "no keys method"
+        st.error(f"Missing `[auth]` in Streamlit secrets. Available keys: `{available}`")
+    except Exception:
+        st.error("Missing `config.yaml` (local) or `[auth]` in Streamlit secrets. Could not read secrets.")
     st.stop()
 
 auth_config = _load_auth_config()
