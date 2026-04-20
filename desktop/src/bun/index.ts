@@ -1,26 +1,24 @@
 import { BrowserWindow, ApplicationMenu } from "electrobun/bun";
-import { spawn } from "bun";
+import { spawn, type Subprocess } from "bun";
 import Electrobun from "electrobun/bun";
 import { existsSync } from "fs";
 import { resolve, join } from "path";
 
 // ── Configuration ────────────────────────────────────────────────────
-const PORT = 5001;
-const FLASK_URL = `http://127.0.0.1:${PORT}`;
+const MAX_RESTARTS = 3;
+const RESTART_DELAY_MS = 1500;
 
 // Find the project root by looking for run.py + rag/ directory
 function findProjectRoot(): string {
-  // Check env override first
   if (process.env.DOCRAG_ROOT && existsSync(join(process.env.DOCRAG_ROOT, "run.py"))) {
     return resolve(process.env.DOCRAG_ROOT);
   }
 
-  // Known candidates: relative to desktop/ dir, cwd, home
   const candidates = [
-    resolve(__dirname, "../../../../.."),       // inside .app bundle: Contents/Resources/app/bun -> up 5
-    resolve(__dirname, "../../.."),             // dev: src/bun -> up 3
-    resolve(process.cwd(), ".."),              // desktop/ cwd -> up 1
-    resolve(process.cwd()),                    // maybe launched from project root
+    resolve(__dirname, "../../../../.."),
+    resolve(__dirname, "../../.."),
+    resolve(process.cwd(), ".."),
+    resolve(process.cwd()),
   ];
 
   for (const dir of candidates) {
@@ -61,35 +59,15 @@ async function findPython(projectRoot: string): Promise<string> {
   throw new Error("No Python with Flask found. Run: pip install -r requirements.txt");
 }
 
-// Wait for Flask to be ready
-async function waitForServer(url: string, timeoutMs = 15000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return;
-    } catch {
-      // not ready yet
-    }
-    await Bun.sleep(200);
-  }
-  throw new Error(`Flask server did not start within ${timeoutMs / 1000}s`);
-}
-
-// ── Main ─────────────────────────────────────────────────────────────
-async function main() {
-  const PROJECT_ROOT = findProjectRoot();
-  console.log(`[DocRag] Project root: ${PROJECT_ROOT}`);
-
-  // Find Python
-  const python = await findPython(PROJECT_ROOT);
-  console.log(`[DocRag] Using Python: ${python}`);
-
-  // Start Flask server
-  const flask = spawn({
-    cmd: [python, "run.py", "--port", String(PORT)],
-    cwd: PROJECT_ROOT,
-    stdout: "inherit",
+// Start Flask with --port 0 and parse the dynamically assigned port from stdout
+async function startFlask(
+  python: string,
+  projectRoot: string,
+): Promise<{ proc: Subprocess; port: number; url: string }> {
+  const proc = spawn({
+    cmd: [python, "run.py", "--port", "0"],
+    cwd: projectRoot,
+    stdout: "pipe",
     stderr: "inherit",
     env: {
       ...process.env,
@@ -97,31 +75,97 @@ async function main() {
     },
   });
 
-  console.log(`[DocRag] Flask server starting (PID ${flask.pid})...`);
-
-  // Clean up Flask on exit
-  const cleanup = () => {
-    try {
-      flask.kill();
-    } catch {
-      // already dead
+  // Read stdout line by line to find DOCRAG_PORT=<n>
+  const reader = proc.stdout.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let port = 0;
+  const timeout = setTimeout(() => {
+    if (!port) {
+      console.error("[DocRag] Timed out waiting for Flask to report port");
+      try { proc.kill(); } catch {}
     }
-  };
+  }, 20000);
 
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
-  process.on("exit", cleanup);
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    process.stdout.write(chunk); // mirror to console
+    buf += chunk;
+    const match = buf.match(/DOCRAG_PORT=(\d+)/);
+    if (match) {
+      port = parseInt(match[1], 10);
+      break;
+    }
+  }
+  clearTimeout(timeout);
 
-  // Wait for Flask to be ready
-  try {
-    await waitForServer(`${FLASK_URL}/api/stats`);
-  } catch (e) {
-    console.error(`[DocRag] ${e}`);
-    cleanup();
-    process.exit(1);
+  if (!port) {
+    throw new Error("Flask exited without reporting a port");
   }
 
-  console.log(`[DocRag] Flask server ready at ${FLASK_URL}`);
+  // Release the reader and pipe remaining stdout to console
+  reader.releaseLock();
+  (async () => {
+    const r = proc.stdout.getReader();
+    const d = new TextDecoder();
+    try {
+      while (true) {
+        const { done, value } = await r.read();
+        if (done) break;
+        process.stdout.write(d.decode(value, { stream: true }));
+      }
+    } catch {}
+  })();
+
+  const url = `http://127.0.0.1:${port}`;
+
+  // Wait for Flask to respond
+  const start = Date.now();
+  while (Date.now() - start < 15000) {
+    try {
+      const res = await fetch(`${url}/api/stats`);
+      if (res.ok) {
+        console.log(`[DocRag] Flask server ready at ${url}`);
+        return { proc, port, url };
+      }
+    } catch {
+      // not ready yet
+    }
+    await Bun.sleep(200);
+  }
+
+  throw new Error("Flask server did not respond in time");
+}
+
+// ── Main ─────────────────────────────────────────────────────────────
+async function main() {
+  const PROJECT_ROOT = findProjectRoot();
+  console.log(`[DocRag] Project root: ${PROJECT_ROOT}`);
+
+  const python = await findPython(PROJECT_ROOT);
+  console.log(`[DocRag] Using Python: ${python}`);
+
+  let flask: Subprocess;
+  let flaskUrl: string;
+  let restarts = 0;
+  let shuttingDown = false;
+
+  // Start Flask (initial)
+  const initial = await startFlask(python, PROJECT_ROOT);
+  flask = initial.proc;
+  flaskUrl = initial.url;
+  console.log(`[DocRag] Flask PID ${flask.pid} on port ${initial.port}`);
+
+  // Cleanup helper
+  const killFlask = () => {
+    try { flask.kill(); } catch {}
+  };
+
+  process.on("SIGINT", () => { shuttingDown = true; killFlask(); });
+  process.on("SIGTERM", () => { shuttingDown = true; killFlask(); });
+  process.on("exit", killFlask);
 
   // Set up native macOS menu
   ApplicationMenu.setApplicationMenu([
@@ -153,10 +197,10 @@ async function main() {
     },
   ]);
 
-  // Open the native window pointing to Flask
+  // Open the native window
   const win = new BrowserWindow({
     title: "DocRag — Document Search",
-    url: FLASK_URL,
+    url: flaskUrl,
     frame: {
       width: 1400,
       height: 900,
@@ -166,10 +210,41 @@ async function main() {
     titleBarStyle: "hiddenInset",
   });
 
-  // Kill Flask when the window closes
   win.on("close", () => {
-    cleanup();
+    shuttingDown = true;
+    killFlask();
   });
+
+  // ── Crash recovery: watch Flask process and restart ──
+  (async () => {
+    while (!shuttingDown) {
+      await flask.exited;
+      if (shuttingDown) break;
+
+      restarts++;
+      if (restarts > MAX_RESTARTS) {
+        console.error(`[DocRag] Flask crashed ${restarts} times, giving up`);
+        break;
+      }
+
+      console.warn(`[DocRag] Flask exited unexpectedly (restart ${restarts}/${MAX_RESTARTS})`);
+      await Bun.sleep(RESTART_DELAY_MS);
+
+      if (shuttingDown) break;
+
+      try {
+        const restarted = await startFlask(python, PROJECT_ROOT);
+        flask = restarted.proc;
+        flaskUrl = restarted.url;
+        console.log(`[DocRag] Flask restarted — PID ${flask.pid} on port ${restarted.port}`);
+
+        // Navigate window to new URL (port may have changed)
+        win.loadURL(flaskUrl);
+      } catch (err) {
+        console.error(`[DocRag] Failed to restart Flask:`, err);
+      }
+    }
+  })();
 }
 
 main().catch((err) => {

@@ -7,7 +7,7 @@ import os
 import threading
 from pathlib import Path
 
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, render_template
 from werkzeug.utils import secure_filename
 
 from .config import TOP_K, DOCS_DIR, load_settings, save_settings, APP_DIR, SETTINGS_FILE
@@ -15,6 +15,9 @@ from .db import get_db, db_stats
 from .search import hybrid_search
 from .claude import ask_claude
 from .ingest import ingest_directory, ingest_status, ingest_lock, extract_pages
+
+# Resolve project root for templates/ and static/ directories
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _docs_root() -> Path:
@@ -24,14 +27,17 @@ def _docs_root() -> Path:
 
 
 def create_app(db_path: str) -> Flask:
-    app = Flask(__name__)
+    app = Flask(
+        __name__,
+        template_folder=str(_PROJECT_ROOT / "templates"),
+        static_folder=str(_PROJECT_ROOT / "static"),
+    )
     app.config["DB_PATH"] = db_path
     app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200 MB upload limit
 
     @app.route("/")
     def index():
-        from .ui import HTML_PAGE
-        return HTML_PAGE
+        return render_template("index.html")
 
     @app.route("/api/stats")
     def stats():

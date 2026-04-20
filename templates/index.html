@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Document RAG Search</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">&#x1F50D;</div>
+    <h1>Document RAG Search</h1>
+    <span id="db-badge" class="badge">loading...</span>
+  </div>
+  <div class="center-controls">
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mode-ai" onclick="setMode('ai')">AI Answer</button>
+      <button class="mode-btn" id="mode-direct" onclick="setMode('direct')">Direct Search</button>
+      <button class="mode-btn" id="mode-pdf" onclick="setMode('pdf')">PDF Match</button>
+    </div>
+  </div>
+  <div class="right-controls">
+    <span class="sub">Powered by Claude + Local Embeddings</span>
+    <button class="theme-btn" id="settings-btn" onclick="openSettings()" title="Settings">&#x2699;</button>
+  </div>
+</header>
+
+<!-- Settings Overlay -->
+<div class="settings-overlay" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
+  <div class="settings-panel">
+    <h2>&#x2699; Settings <button class="close-settings" onclick="closeSettings()">&#x2715;</button></h2>
+
+    <div class="settings-section">Appearance</div>
+    <div class="settings-row">
+      <label>Theme</label>
+      <div class="toggle-row">
+        <button class="toggle-opt" id="theme-dark" onclick="setTheme('dark')">&#x1F319; Dark</button>
+        <button class="toggle-opt" id="theme-light" onclick="setTheme('light')">&#x2600; Light</button>
+      </div>
+    </div>
+
+    <div class="settings-section">API</div>
+    <div class="settings-row">
+      <label>API Key</label>
+      <input type="password" id="api-key-input" placeholder="sk-ant-..." />
+    </div>
+    <div class="settings-row">
+      <label>Model</label>
+      <input type="text" id="model-input" placeholder="claude-sonnet-4-6" />
+    </div>
+
+    <div class="settings-section">Storage</div>
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <div style="display:flex;gap:10px;width:100%">
+        <button class="settings-btn" onclick="revealFolder('docs')">&#x1F4C1; Open Documents Folder</button>
+        <button class="settings-btn" onclick="revealFolder('app')">&#x1F4C2; Open App Data</button>
+      </div>
+      <div class="settings-path" id="settings-path-info">Loading...</div>
+    </div>
+
+    <button class="settings-save" onclick="saveSettings()">Save Settings</button>
+    <div class="settings-status" id="settings-status">&#x2713; Settings saved</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('search')">Search</div>
+  <div class="tab" onclick="switchTab('manage')">Manage Files</div>
+  <div class="tab" onclick="switchTab('library')">Library</div>
+</div>
+
+<!-- ═══ SEARCH PANEL (AI + Direct) ═══ -->
+<div class="panel active" id="panel-search">
+  <div class="layout">
+    <aside>
+      <div>
+        <h3>Database</h3>
+        <div id="dir-stats"><div style="color:var(--muted);font-size:12px">Loading...</div></div>
+      </div>
+
+    </aside>
+    <main>
+      <div id="chat">
+        <div class="empty" id="empty-state">
+          <div class="empty-icon">&#x1F4DA;</div>
+          <h2>Ask anything about your documents</h2>
+          <p>I'll search your document library using hybrid keyword + semantic search, then synthesize an answer with citations using Claude.</p>
+        </div>
+      </div>
+      <div id="text-input-bar" class="input-bar">
+        <textarea id="question" placeholder="Ask a question about your documents..." rows="1"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendQuestion()" title="Ask">&#x27A4;</button>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══ PDF MATCH PANEL ═══ -->
+<div class="panel" id="panel-pdf">
+  <div class="layout">
+    <aside>
+      <div>
+        <h3>Database</h3>
+        <div id="dir-stats-pdf"><div style="color:var(--muted);font-size:12px">Loading...</div></div>
+      </div>
+    </aside>
+    <main>
+      <div class="pdf-panel">
+        <h2>PDF Match</h2>
+        <p class="desc">Upload a PDF to find related documents in your library. Uses semantic + keyword matching — no AI needed.</p>
+        <div class="pdf-search-zone" id="pdf-drop-zone">
+          <input type="file" accept=".pdf" id="pdf-file-input" />
+          <div class="drop-icon">&#x1F4C4;</div>
+          <div id="pdf-drop-label">Drop a PDF here or click to find matching documents</div>
+          <div class="drop-hint">Uploads are not stored — used only for search</div>
+        </div>
+        <div id="pdf-results"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══ MANAGE FILES PANEL ═══ -->
+<div class="panel" id="panel-manage">
+  <div class="manage-panel">
+    <h2>Manage Files</h2>
+    <p class="desc">Drag &amp; drop PDFs to upload, organize into folders, then ingest. Drag files between folders to reorganize.</p>
+
+    <div class="upload-target">
+      <label>Upload to:</label>
+      <select id="upload-folder">
+        <option value="">Root (no folder)</option>
+      </select>
+      <button class="btn" onclick="promptNewFolder()" style="padding:8px 14px;font-size:12px">+ New Folder</button>
+    </div>
+
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" multiple accept=".pdf" id="file-input" />
+      <div class="drop-icon">&#x1F4C4;</div>
+      <div>Drop PDF files here or click to browse</div>
+      <div class="drop-hint">PDF files only · Max 200 MB per file</div>
+    </div>
+
+    <div class="manage-top">
+      <button class="btn" id="ingest-all-btn" onclick="ingestManaged()">&#x26A1; Ingest All Files</button>
+      <div class="progress-wrap" id="progress-wrap" style="flex:1;min-width:200px">
+        <div class="progress-bar-bg"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+        <div class="progress-text" id="progress-text"></div>
+      </div>
+    </div>
+
+    <div id="folder-container"></div>
+  </div>
+</div>
+
+<!-- ═══ LIBRARY PANEL ═══ -->
+<div class="panel" id="panel-library">
+  <div class="ingest-panel">
+    <h2>Document Library</h2>
+    <p class="desc">All ingested documents. You can remove individual documents from the database.</p>
+    <div class="doc-list" id="doc-list">Loading...</div>
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

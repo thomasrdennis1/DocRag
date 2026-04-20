@@ -20,6 +20,7 @@ USAGE:
 """
 
 import os
+import socket
 import sys
 import argparse
 import threading
@@ -66,7 +67,18 @@ def main():
         thread.start()
 
     app = create_app(args.db)
-    url = f"http://localhost:{args.port}"
+
+    # Resolve port: 0 means pick a free port dynamically
+    port = args.port
+    if port == 0:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+
+    url = f"http://localhost:{port}"
+
+    # Machine-readable line for Electrobun to detect the port
+    print(f"DOCRAG_PORT={port}", flush=True)
 
     print(f"\nDocument RAG Search running at {url}")
     print(f"Database: {Path(args.db).resolve()}")
@@ -81,7 +93,7 @@ def main():
     except Exception:
         pass
 
-    app.run(host="127.0.0.1", port=args.port, debug=False)
+    app.run(host="127.0.0.1", port=port, debug=False)
 
 
 if __name__ == "__main__":
