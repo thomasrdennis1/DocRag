@@ -26,10 +26,10 @@ import argparse
 import threading
 from pathlib import Path
 
-from rag.config import DEFAULT_DB, DEFAULT_PORT, DOCS_DIR, MODEL_NAME, APP_DIR, get as cfg_get
-from rag.db import init_db
-from rag.routes import create_app
-from rag.ingest import ingest_directory
+from app.config import DEFAULT_DB, DEFAULT_PORT, DOCS_DIR, MODEL_NAME, APP_DIR, get as cfg_get
+from app.db import init_db
+from app.routes import create_app
+from app.ingest import ingest_directory
 
 
 def main():

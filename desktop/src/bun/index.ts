@@ -8,7 +8,7 @@ import { resolve, join } from "path";
 const MAX_RESTARTS = 3;
 const RESTART_DELAY_MS = 1500;
 
-// Find the project root by looking for run.py + rag/ directory
+// Find the project root by looking for run.py + app/ directory
 function findProjectRoot(): string {
   if (process.env.DOCRAG_ROOT && existsSync(join(process.env.DOCRAG_ROOT, "run.py"))) {
     return resolve(process.env.DOCRAG_ROOT);
@@ -22,13 +22,13 @@ function findProjectRoot(): string {
   ];
 
   for (const dir of candidates) {
-    if (existsSync(join(dir, "run.py")) && existsSync(join(dir, "rag"))) {
+    if (existsSync(join(dir, "run.py")) && existsSync(join(dir, "app"))) {
       return dir;
     }
   }
 
   throw new Error(
-    "Could not find DocRag project root (run.py + rag/). " +
+    "Could not find DocRag project root (run.py + app/). " +
     "Set DOCRAG_ROOT environment variable to the project directory."
   );
 }
