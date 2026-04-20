@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--db",   default=DEFAULT_DB,   help=f"SQLite database path (default: {DEFAULT_DB})")
     parser.add_argument("--port", default=DEFAULT_PORT, type=int, help=f"Port (default: {DEFAULT_PORT})")
     parser.add_argument("--docs", default=None, help="Auto-ingest PDFs from this directory on startup")
+    parser.add_argument("--debug", action="store_true", help="Enable Flask debug mode with auto-reload")
     args = parser.parse_args()
 
     init_db(args.db)
@@ -93,7 +94,7 @@ def main():
     except Exception:
         pass
 
-    app.run(host="127.0.0.1", port=port, debug=False)
+    app.run(host="127.0.0.1", port=port, debug=args.debug)
 
 
 if __name__ == "__main__":
